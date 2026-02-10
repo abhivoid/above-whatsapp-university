@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Verify claim</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Claim Verification</h1>
+    <textarea id="claim" placeholder="Paste or type a claim to verify..."></textarea>
+    <div class="actions">
+      <button id="verify" type="button">Verify claim</button>
+    </div>
+    <div id="status" class="status hidden"></div>
+    <div id="result" class="result hidden">
+      <div id="verdict" class="verdict"></div>
+      <div id="reasoning" class="reasoning"></div>
+      <ul id="citations" class="citations"></ul>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
