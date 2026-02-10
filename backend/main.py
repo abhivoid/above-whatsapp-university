@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from agent.pipeline import run_verification_pipeline
+from agent.web_retrieval import is_web_search_configured
 
 app = FastAPI(
     title="Claim Verification API",
@@ -43,7 +44,11 @@ class VerifyResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Reports API status and whether real-time web search is configured (SERPER_API_KEY or TAVILY_API_KEY)."""
+    return {
+        "status": "ok",
+        "web_search_configured": is_web_search_configured(),
+    }
 
 
 @app.post("/verify", response_model=VerifyResponse)

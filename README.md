@@ -5,7 +5,7 @@ A browser extension that verifies claims with citations using an **agentic RAG**
 ## Features
 
 - **Browser extension (Chrome)**: Right-click on selected text → "Verify claim" → open extension popup (claim pre-filled) → see verdict and citations.
-- **Agentic RAG**: Claim decomposition, retrieval from a vector knowledge base, optional query rewrite and second retrieval, then LLM verification with strict citation rules.
+- **Agentic RAG**: Claim decomposition, retrieval from a vector knowledge base **and real-time web search** (when Serper or Tavily API key is set), optional query rewrite and second retrieval, then LLM verification with strict citation rules.
 - **No fabrication**: Citations come only from retrieved evidence; if there is not enough evidence, the system returns "Not Enough Evidence" and no citations.
 
 ## Quick start
@@ -67,10 +67,11 @@ The popup shows verdict, reasoning, and clickable citations (title + snippet). C
 │   ├── content.js
 │   ├── popup.html, popup.js, popup.css
 ├── backend/
-│   ├── main.py          # FastAPI app, POST /verify
+│   ├── main.py          # FastAPI app, POST /verify, GET /health
 │   ├── agent/           # Agentic RAG pipeline
-│   │   ├── pipeline.py  # decompose → retrieve → verify
+│   │   ├── pipeline.py  # decompose → retrieve (KB + web) → verify
 │   │   ├── retrieval.py # ChromaDB + merge
+│   │   ├── web_retrieval.py # Serper/Tavily web search for evidence
 │   │   ├── verify.py    # LLM verification, citation parsing
 │   │   ├── prompts.py
 │   │   └── llm_helpers.py # decompose, query rewrite
@@ -88,8 +89,10 @@ The popup shows verdict, reasoning, and clickable citations (title + snippet). C
 | `OPENAI_API_KEY` | Yes (for verification) | OpenAI API key for LLM calls. |
 | `OPENAI_MODEL` | No | Model name (default: `gpt-4o-mini`). |
 | `CHROMA_PERSIST_DIR` | No | Path for ChromaDB data (default: `backend/chroma_data`). |
+| `SERPER_API_KEY` | No (for web search) | [Serper](https://serper.dev) API key for real-time web search. If set, evidence is fetched from the web in addition to the KB. |
+| `TAVILY_API_KEY` | No (for web search) | [Tavily](https://tavily.com) API key. Used only when `SERPER_API_KEY` is not set. Same role as Serper. |
 
-Without `OPENAI_API_KEY`, the API still runs but returns "Not Enough Evidence" with a message that verification is not configured.
+Without `OPENAI_API_KEY`, the API still runs but returns "Not Enough Evidence" with a message that verification is not configured. Without `SERPER_API_KEY` or `TAVILY_API_KEY`, verification uses only the ChromaDB knowledge base (and returns "Not Enough Evidence" when no KB hits are found).
 
 ## Ever-growing knowledge base
 
@@ -109,4 +112,12 @@ Without `OPENAI_API_KEY`, the API still runs but returns "Not Enough Evidence" w
   Response: `{"verdict": "Supported|Refuted|Not Enough Evidence", "reasoning": "...", "citations": [{"title", "url", "snippet"}]}`
 
 - **GET /health**  
-  Returns `{"status": "ok"}`.
+  Returns `{"status": "ok", "web_search_configured": true|false}`. `web_search_configured` is true when `SERPER_API_KEY` or `TAVILY_API_KEY` is set.
+
+### Real-time web verification
+
+To have the backend **proactively fetch evidence from the web** (so the user only submits a headline or claim):
+
+1. Get an API key from [Serper](https://serper.dev) or [Tavily](https://tavily.com).
+2. Set one of: `export SERPER_API_KEY=...` or `export TAVILY_API_KEY=...` (Serper is tried first).
+3. Restart the backend. The pipeline will then query the web for each claim (and decomposed/rewritten queries), merge results with ChromaDB, and pass the combined evidence to the verification LLM. Citations will include both KB and web sources; no user-supplied evidence is required.
