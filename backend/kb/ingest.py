@@ -4,12 +4,20 @@ Run from backend directory: python -m kb.ingest
 Uses the same embedding model and collection as agent.retrieval.
 """
 import sys
+import os
+import warnings
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 # Run from repo root or backend; ensure backend is on path
 backend_dir = Path(__file__).resolve().parents[1]
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
+
+# Suppress harmless warnings from sentence-transformers model loading
+warnings.filterwarnings("ignore", category=UserWarning)
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 from sentence_transformers import SentenceTransformer
 import chromadb
@@ -53,7 +61,9 @@ def main():
     PERSIST_DIR.mkdir(parents=True, exist_ok=True)
 
     print("Loading embedding model...")
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    # Suppress transformers library warnings during model loading
+    with redirect_stderr(StringIO()):
+        model = SentenceTransformer("all-MiniLM-L6-v2")
 
     print("Connecting to ChromaDB...")
     client = chromadb.PersistentClient(path=persist_dir, settings=Settings(anonymized_telemetry=False))

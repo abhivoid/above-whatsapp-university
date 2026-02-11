@@ -43,4 +43,9 @@ SAMPLE_DOCUMENTS = [
         "url": "https://example.com/factcheck/masks-effectiveness",
         "text": "Masks, especially well-fitted respirators (N95/KN95) and surgical masks, reduce the spread of respiratory viruses including COVID-19 and flu. They work by blocking droplets and aerosols from infected wearers and reducing inhalation by the wearer. CDC and WHO recommend masks in high-transmission settings. Studies show mask mandates are associated with lower case rates when combined with other measures.",
     },
+    {
+        "title": "Maruti Suzuki is India's largest car manufacturer",
+        "url": "https://example.com/news/maruti-suzuki-india",
+        "text": "Maruti Suzuki India Limited is the largest passenger vehicle manufacturer in India, holding a significant market share in the Indian automotive industry. The company is a subsidiary of Japanese automaker Suzuki Motor Corporation. Maruti Suzuki has been the market leader in India for decades, with popular models including the Swift, Baleno, Dzire, and Vitara Brezza. The company operates manufacturing facilities in Gurugram and Manesar, Haryana, and has a strong sales and service network across India. Maruti Suzuki's sales performance is closely watched as an indicator of the Indian automotive market's health.",
+    },
 ]

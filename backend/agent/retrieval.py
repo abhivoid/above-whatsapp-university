@@ -2,6 +2,9 @@
 Retrieval from vector store (ChromaDB). Returns list of {title, url, snippet}.
 """
 import os
+import warnings
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 # Lazy init to avoid import errors when chroma not yet set up
@@ -14,8 +17,14 @@ def _get_embedding_fn():
     global _embedding_fn
     if _embedding_fn is None:
         try:
-            from sentence_transformers import SentenceTransformer
-            _embedding_fn = SentenceTransformer("all-MiniLM-L6-v2")
+            # Suppress harmless warnings from sentence-transformers model loading
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+                from sentence_transformers import SentenceTransformer
+                # Suppress transformers library stderr output during model loading
+                with redirect_stderr(StringIO()):
+                    _embedding_fn = SentenceTransformer("all-MiniLM-L6-v2")
         except Exception as e:
             raise RuntimeError(f"Failed to load embedding model: {e}") from e
     return _embedding_fn
