@@ -4,12 +4,12 @@
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'verify-claim',
-    title: 'Verify claim',
+    title: 'Check with Above WhatsApp University',
     contexts: ['selection']
   });
 });
 
-// When user clicks "Verify claim" in context menu, get selection and open popup with claim
+// When user clicks "Check with Above WhatsApp University" in context menu, get selection and open popup with claim
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== 'verify-claim' || !info.selectionText) return;
   const claim = info.selectionText.trim();

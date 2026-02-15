@@ -85,16 +85,36 @@ def retrieve_evidence(claim: str, max_chunks: int = 10) -> list[dict]:
     return out
 
 
-def merge_evidence(evidence_lists: list[list[dict]]) -> list[dict]:
-    """Merge multiple evidence lists and deduplicate by url. Order preserved (first occurrence kept)."""
+def _snippet_fingerprint(snippet: str, length: int = 120) -> str:
+    """Normalize snippet for similarity dedupe: strip, lowercase, truncate."""
+    s = (snippet or "").strip().lower()[:length]
+    return " ".join(s.split())
+
+
+def merge_evidence(
+    evidence_lists: list[list[dict]],
+    dedupe_by_snippet: bool = True,
+    snippet_dedupe_len: int = 120,
+) -> list[dict]:
+    """
+    Merge multiple evidence lists. Deduplicate by URL (always); optionally by snippet fingerprint.
+    Order preserved (first occurrence kept). Near-duplicate snippets (same fingerprint) are dropped.
+    """
     seen_urls: set[str] = set()
+    seen_fingerprints: set[str] = set()
     out: list[dict] = []
     for lst in evidence_lists:
         for e in lst:
             url = (e.get("url") or "").strip()
-            if url and url not in seen_urls:
+            snippet = e.get("snippet") or ""
+            fp = _snippet_fingerprint(snippet, snippet_dedupe_len) if dedupe_by_snippet else ""
+            if url and url in seen_urls:
+                continue
+            if dedupe_by_snippet and fp and fp in seen_fingerprints:
+                continue
+            if url:
                 seen_urls.add(url)
-                out.append(e)
-            elif not url and e not in out:
-                out.append(e)
+            if fp:
+                seen_fingerprints.add(fp)
+            out.append(e)
     return out

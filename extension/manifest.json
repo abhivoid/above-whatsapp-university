@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Claim Verification Assistant",
+  "name": "Above WhatsApp University",
   "version": "1.0.0",
-  "description": "Verify claims with citations. Highlight text and click 'Verify claim' for a verdict.",
+  "description": "Above WhatsApp University — drop a claim, get the truth with sources. Stay sharp.",
   "permissions": ["contextMenus", "activeTab", "scripting", "storage"],
   "host_permissions": ["http://localhost:8000/*", "https://*/*"],
   "background": {
@@ -17,6 +17,6 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Verify claim"
+    "default_title": "Above WhatsApp University"
   }
 }

@@ -1,28 +1,43 @@
 """
-Verification LLM: takes claim + evidence, returns verdict, reasoning, and cited indices.
-Citations are filtered to only include indices from retrieved evidence.
+Verification LLM: takes claim + evidence, returns verdict, reasoning, cited indices,
+and optional confidence_note / conflict_mentioned. Uses Snopes-style verdict taxonomy.
 """
 import os
 import re
-from .prompts import SYSTEM_VERIFY, build_verification_prompt
+from .prompts import SYSTEM_VERIFY, build_verification_prompt, VERDICTS_FACTUAL
+
+# Canonical verdicts; normalize_verdict maps LLM output to one of these
+VERDICT_UNPROVEN = "Unproven"
+VERDICT_OUT_OF_SCOPE = "Out of Scope"
 
 
 def normalize_verdict(s: str) -> str:
-    v = (s or "").strip().lower()
-    if "supported" in v and "not" not in v[:20]:
-        return "Supported"
-    if "refuted" in v:
-        return "Refuted"
-    return "Not Enough Evidence"
+    """Map LLM verdict string to canonical taxonomy: True, Mostly True, Mixture, Mostly False, False, Unproven."""
+    v = (s or "").strip()
+    v_lower = v.lower()
+    # Legacy mappings
+    if "supported" in v_lower and "not" not in v_lower[:25]:
+        return "True"
+    if "refuted" in v_lower:
+        return "False"
+    if "not enough evidence" in v_lower or "unproven" in v_lower:
+        return VERDICT_UNPROVEN
+    # Match new taxonomy (case-insensitive)
+    for canonical in VERDICTS_FACTUAL:
+        if canonical.lower() in v_lower or v_lower == canonical.lower():
+            return canonical
+    return VERDICT_UNPROVEN
 
 
-def _parse_llm_response(text: str) -> tuple[str, str, list[int]]:
-    verdict = "Not Enough Evidence"
+def _parse_llm_response(text: str) -> tuple[str, str, list[int], bool, str]:
+    verdict = VERDICT_UNPROVEN
     reasoning = ""
     citations: list[int] = []
+    conflict_mentioned = False
+    confidence_note = ""
 
     if not text:
-        return verdict, reasoning, citations
+        return verdict, reasoning, citations, conflict_mentioned, confidence_note
 
     # VERDICT: ...
     m = re.search(r"VERDICT:\s*(.+?)(?:\n|REASONING:|$)", text, re.IGNORECASE | re.DOTALL)
@@ -30,7 +45,7 @@ def _parse_llm_response(text: str) -> tuple[str, str, list[int]]:
         verdict = m.group(1).strip()
 
     # REASONING: ...
-    m = re.search(r"REASONING:\s*(.+?)(?:\n\s*CITATIONS:|$)", text, re.IGNORECASE | re.DOTALL)
+    m = re.search(r"REASONING:\s*(.+?)(?:\n\s*CITATIONS:|\n\s*CONFLICT|\n\s*CONFIDENCE|$)", text, re.IGNORECASE | re.DOTALL)
     if m:
         reasoning = m.group(1).strip()
 
@@ -43,20 +58,34 @@ def _parse_llm_response(text: str) -> tuple[str, str, list[int]]:
             if part.isdigit():
                 citations.append(int(part))
 
-    return verdict, reasoning, citations
+    # CONFLICT_MENTIONED: yes
+    m = re.search(r"CONFLICT_MENTIONED:\s*(\w+)", text, re.IGNORECASE)
+    if m and m.group(1).strip().lower() == "yes":
+        conflict_mentioned = True
+
+    # CONFIDENCE_NOTE: ...
+    m = re.search(r"CONFIDENCE_NOTE:\s*(.+?)(?:\n|$)", text, re.IGNORECASE | re.DOTALL)
+    if m:
+        confidence_note = m.group(1).strip()
+
+    return verdict, reasoning, citations, conflict_mentioned, confidence_note
 
 
-def run_verification_llm(claim: str, evidence_list: list[dict]) -> tuple[str, str, list[int]]:
+def run_verification_llm(
+    claim: str, evidence_list: list[dict]
+) -> tuple[str, str, list[int], bool, str]:
     """
-    Call LLM with claim + evidence. Returns (verdict, reasoning, list of evidence indices to cite).
+    Call LLM with claim + evidence. Returns (verdict, reasoning, cited_indices, conflict_mentioned, confidence_note).
+    On API failure or missing key, returns safe Unproven with no fabrication.
     """
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        # No API key: return Not Enough Evidence and no citations (no fabrication)
         return (
-            "Not Enough Evidence",
+            VERDICT_UNPROVEN,
             "Verification is not configured (missing OPENAI_API_KEY).",
             [],
+            False,
+            "",
         )
 
     try:
@@ -75,14 +104,15 @@ def run_verification_llm(claim: str, evidence_list: list[dict]) -> tuple[str, st
         text = (response.choices[0].message.content or "").strip()
     except Exception as e:
         return (
-            "Not Enough Evidence",
-            f"Verification service error: {e!s}.",
+            VERDICT_UNPROVEN,
+            "Verification service temporarily unavailable.",
             [],
+            False,
+            "",
         )
 
-    verdict, reasoning, cited_indices = _parse_llm_response(text)
+    verdict, reasoning, cited_indices, conflict_mentioned, confidence_note = _parse_llm_response(text)
     verdict = normalize_verdict(verdict)
-    # If LLM said not enough evidence, clear citations
-    if verdict == "Not Enough Evidence":
+    if verdict == VERDICT_UNPROVEN:
         cited_indices = []
-    return verdict, reasoning, cited_indices
+    return verdict, reasoning, cited_indices, conflict_mentioned, confidence_note

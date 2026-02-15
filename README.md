@@ -1,12 +1,14 @@
-# Real-Time News Claim Verification Assistant
+# Above WhatsApp University
 
-A browser extension that verifies claims with citations using an **agentic RAG** backend. Highlight any claim on the web, click **Verify claim**, and get a verdict (Supported / Refuted / Not Enough Evidence) with transparent reasoning and real sources only.
+A browser extension that verifies claims with citations using an **agentic RAG** backend. Highlight any claim on the web, click **Verify claim**, and get a Snopes-style verdict with transparent reasoning and real sources only.
 
 ## Features
 
 - **Browser extension (Chrome)**: Right-click on selected text → "Verify claim" → open extension popup (claim pre-filled) → see verdict and citations.
-- **Agentic RAG**: Claim decomposition, retrieval from a vector knowledge base **and real-time web search** (when Serper or Tavily API key is set), optional query rewrite and second retrieval, then LLM verification with strict citation rules.
-- **No fabrication**: Citations come only from retrieved evidence; if there is not enough evidence, the system returns "Not Enough Evidence" and no citations.
+- **Claim classifier (guardrail)**: Pre-retrieval step classifies input as **in scope** (verifiable factual claim) or **out of scope**. Only in-scope claims run retrieval and verification. News headlines and headline-style text (e.g. "What's at stake for…", "Why the Fed raised rates") are always in scope; personal statements, opinions, greetings, and direct questions return "Out of Scope" without retrieval.
+- **Agentic RAG**: Decompose → retrieve (ChromaDB + web when Serper/Tavily is set) → optional query rewrite retry → LLM verification with strict citation rules.
+- **Richer verdict taxonomy**: True, Mostly True, Mixture, Mostly False, False, Unproven, Out of Scope. Edge cases (conflicting evidence, single weak source, empty retrieval) map to Unproven or Mixture with optional confidence/conflict notes.
+- **No fabrication**: Citations come only from retrieved evidence; empty or irrelevant evidence yields "Unproven" and no citations. API and retrieval failures return a safe Unproven response without exposing errors.
 
 ## Quick start
 
@@ -58,6 +60,11 @@ The popup shows verdict, reasoning, and clickable citations (title + snippet). C
 4. Right-click → **Verify claim**, then click the extension icon.
 5. In the popup, click **Verify claim** and see the verdict with citations.
 
+## Documentation
+
+- **[docs/TECHNICAL.md](docs/TECHNICAL.md)** — Short technical overview (configuration table, pipeline flow, component map).
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Architecture diagram (RAG + agent flow) and component map.
+
 ## Project structure
 
 ```
@@ -69,10 +76,11 @@ The popup shows verdict, reasoning, and clickable citations (title + snippet). C
 ├── backend/
 │   ├── main.py          # FastAPI app, POST /verify, GET /health
 │   ├── agent/           # Agentic RAG pipeline
-│   │   ├── pipeline.py  # decompose → retrieve (KB + web) → verify
-│   │   ├── retrieval.py # ChromaDB + merge
+│   │   ├── classifier.py # Guardrail: IN_SCOPE / OUT_OF_SCOPE
+│   │   ├── pipeline.py  # classify → decompose → retrieve (KB + web) → verify
+│   │   ├── retrieval.py # ChromaDB + merge (URL + snippet dedupe)
 │   │   ├── web_retrieval.py # Serper/Tavily web search for evidence
-│   │   ├── verify.py    # LLM verification, citation parsing
+│   │   ├── verify.py    # LLM verification, Snopes-style verdicts
 │   │   ├── prompts.py
 │   │   └── llm_helpers.py # decompose, query rewrite
 │   ├── kb/
@@ -92,27 +100,34 @@ The popup shows verdict, reasoning, and clickable citations (title + snippet). C
 | `SERPER_API_KEY` | No (for web search) | [Serper](https://serper.dev) API key for real-time web search. If set, evidence is fetched from the web in addition to the KB. |
 | `TAVILY_API_KEY` | No (for web search) | [Tavily](https://tavily.com) API key. Used only when `SERPER_API_KEY` is not set. Same role as Serper. |
 
-Without `OPENAI_API_KEY`, the API still runs but returns "Not Enough Evidence" with a message that verification is not configured. Without `SERPER_API_KEY` or `TAVILY_API_KEY`, verification uses only the ChromaDB knowledge base (and returns "Not Enough Evidence" when no KB hits are found).
+Without `OPENAI_API_KEY`, the API still runs but returns "Unproven" with a message that verification is not configured; the classifier defaults to in scope so retrieval still runs. Without `SERPER_API_KEY` or `TAVILY_API_KEY`, verification uses only the ChromaDB knowledge base (and returns "Unproven" when no evidence is found).
 
 ## Ever-growing knowledge base
 
 - Add more documents to `backend/kb/sample_documents.py` (each with `title`, `url`, `text`), then run `python -m kb.ingest` again to re-index.
 - Or implement a separate script that fetches fact-checks (e.g. from RSS or a public dataset), normalizes them to `{title, url, text}`, and calls the same ingest logic so the same `/verify` pipeline stays unchanged.
 
-## Constraints (as per challenge)
+## Verdict taxonomy and guardrail
 
-- **Always cite sources**: Supported/Refuted answers include at least one citation from the knowledge base (or future web search).
-- **Never fabricate**: Citations are built only from retrieval/search results; the LLM may only reference provided source indices.
-- **Not Enough Evidence**: When retrieval returns nothing or the LLM decides evidence is insufficient, the verdict is "Not Enough Evidence" and the citations list is empty.
+- **Verdicts**: True, Mostly True, Mixture, Mostly False, False, Unproven, Out of Scope. The generator uses only the factual set (Out of Scope is set by the guardrail).
+- **Guardrail**: The classifier marks as **in scope** factual claims, headlines, and headline-style titles (including "What's at stake…", "Why X", "How Y"). **Out of scope**: personal statements, pure opinions, direct questions for information, greetings, advice requests, or too vague/nonsensical. When in doubt the classifier prefers in scope.
+- **Edge cases**: Empty retrieval → Unproven (no LLM call). Conflicting evidence → Mixture or Unproven with conflict noted. Single weak source → Unproven or Mostly True/Mostly False with a confidence note. Input length is capped; API/key failures return Unproven without stack traces.
 
 ## API
 
 - **POST /verify**  
-  Body: `{"claim": "user-selected or pasted text"}`  
-  Response: `{"verdict": "Supported|Refuted|Not Enough Evidence", "reasoning": "...", "citations": [{"title", "url", "snippet"}]}`
+  Body: `{"claim": "user-selected or pasted text"}` (max length enforced).  
+  Response: `{"verdict", "verdict_category", "reasoning", "citations": [{"title", "url", "snippet"}], "evidence_count", "conflict_mentioned", "confidence_note"}`.  
+  Verdict is one of: True, Mostly True, Mixture, Mostly False, False, Unproven, Out of Scope.
 
 - **GET /health**  
-  Returns `{"status": "ok", "web_search_configured": true|false}`. `web_search_configured` is true when `SERPER_API_KEY` or `TAVILY_API_KEY` is set.
+  Returns `{"status": "ok", "web_search_configured": true|false}`.
+
+## Constraints
+
+- **Never fabricate**: Citations are built only from retrieval/search results; the LLM may only reference provided source indices.
+- **Empty evidence**: No generator call; response is Unproven with empty citations.
+- **Safety**: Input length limits; on retrieval or LLM failure the API returns Unproven with a short message and never exposes stack traces.
 
 ### Real-time web verification
 

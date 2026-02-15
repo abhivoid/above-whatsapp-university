@@ -63,30 +63,44 @@ function hideStatus() {
 }
 
 /**
+ * Maps Snopes-style verdict to CSS style class (supported / refuted / not-enough).
+ * True, Mostly True -> supported; False, Mostly False -> refuted; rest -> not-enough.
+ */
+function getVerdictStyleClass(verdict) {
+  const v = (verdict || '').toLowerCase();
+  if (v === 'true' || v === 'mostly true') return 'supported';
+  if (v === 'false' || v === 'mostly false') return 'refuted';
+  return 'not-enough'; // Mixture, Unproven, Out of Scope
+}
+
+/**
  * Shows the verification result with animations.
- * @param {string} verdict - The verdict (Supported, Refuted, Not Enough Evidence)
+ * @param {string} verdict - Verdict (True, Mostly True, Mixture, Mostly False, False, Unproven, Out of Scope)
  * @param {string} reasoning - The reasoning text
  * @param {Array} citations - Array of citation objects with title, url, snippet
+ * @param {string} [confidenceNote] - Optional note e.g. "limited evidence", "conflicting sources"
  */
-function showResult(verdict, reasoning, citations) {
+function showResult(verdict, reasoning, citations, confidenceNote) {
   if (!resultEl) return;
   
   resultEl.classList.remove('hidden');
   
-  // Update verdict with proper formatting
-  const verdictClass = verdict.toLowerCase().replace(/\s+/g, '-');
+  const styleClass = getVerdictStyleClass(verdict);
   if (verdictEl) {
-    verdictEl.className = 'verdict ' + verdictClass;
+    verdictEl.className = 'verdict ' + styleClass;
     if (verdictTextEl) {
-      verdictTextEl.textContent = verdict;
+      verdictTextEl.textContent = verdict || 'Unproven';
     } else {
-      verdictEl.textContent = verdict;
+      verdictEl.textContent = verdict || 'Unproven';
     }
   }
   
-  // Update reasoning with fade-in
+  let reasoningText = reasoning || 'No reasoning provided.';
+  if (confidenceNote) {
+    reasoningText += '\n\nNote: ' + confidenceNote;
+  }
   if (reasoningEl) {
-    reasoningEl.textContent = reasoning || 'No reasoning provided.';
+    reasoningEl.textContent = reasoningText;
   }
 
   // Clear and rebuild citations with staggered animations
@@ -138,7 +152,7 @@ function showResult(verdict, reasoning, citations) {
 async function verify() {
   const claim = (claimEl.value || '').trim();
   if (!claim) {
-    showStatus('Enter or paste a claim to verify.', 'error');
+    showStatus("Drop a claim above — we'll verify it.", 'error');
     // Add shake animation to input
     if (claimEl) {
       claimEl.style.animation = 'shake 0.5s ease';
@@ -169,7 +183,7 @@ async function verify() {
     }, 300);
   }
   
-  showStatus('Verifying claim…', 'loading');
+  showStatus('Above WhatsApp University is on it…', 'loading');
 
   try {
     const res = await fetch(API_BASE + '/verify', {
@@ -189,9 +203,10 @@ async function verify() {
     // Small delay before showing result for smoother transition
     setTimeout(() => {
       showResult(
-        data.verdict || 'Not Enough Evidence',
+        data.verdict || 'Unproven',
         data.reasoning || '',
-        data.citations || []
+        data.citations || [],
+        data.confidence_note || null
       );
     }, 200);
     
