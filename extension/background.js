@@ -14,13 +14,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== 'verify-claim' || !info.selectionText) return;
   const claim = info.selectionText.trim();
   if (!claim) return;
-  // Store claim for popup to read; then open popup (user may need to click extension icon)
-  chrome.storage.local.set({ pendingClaim: claim }, () => {
+  // Store claim and autoVerify flag for popup to read and auto-trigger verification
+  chrome.storage.local.set({ pendingClaim: claim, autoVerify: true }, () => {
     chrome.action.openPopup?.().catch(() => {});
     // Fallback: open popup by focusing the extension (user clicks icon to see claim)
     chrome.windows.getCurrent((win) => {
       chrome.action.setBadgeText({ text: '1', tabId: tab.id });
-      chrome.action.setBadgeBackgroundColor({ color: '#2563eb', tabId: tab.id });
+      chrome.action.setBadgeBackgroundColor({ color: '#E6501B', tabId: tab.id });
     });
   });
 });

@@ -272,11 +272,12 @@ if (logo3d) {
   });
 }
 
-// Pre-fill claim from context menu (stored by background)
-chrome.storage.local.get(['pendingClaim'], (o) => {
+// Pre-fill claim from context menu (stored by background) and auto-verify
+chrome.storage.local.get(['pendingClaim', 'autoVerify'], (o) => {
   if (o.pendingClaim && claimEl) {
     claimEl.value = o.pendingClaim;
-    chrome.storage.local.remove('pendingClaim');
+    const shouldAutoVerify = o.autoVerify !== false; // Default to true
+    chrome.storage.local.remove(['pendingClaim', 'autoVerify']);
     chrome.runtime.sendMessage({ type: 'POPUP_READY' }).catch(() => {});
     
     // Focus the textarea and scroll to bottom with animation
@@ -288,6 +289,14 @@ chrome.storage.local.get(['pendingClaim'], (o) => {
       setTimeout(() => {
         claimEl.style.boxShadow = '';
       }, 1000);
+      
+      // Auto-trigger verification if coming from context menu
+      if (shouldAutoVerify && verifyBtn) {
+        // Small delay to ensure UI is ready
+        setTimeout(() => {
+          verify();
+        }, 300);
+      }
     }, 100);
   }
 });

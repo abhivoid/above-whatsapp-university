@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Above WhatsApp University",
+  "name": "Above Whatsapp university",
   "version": "1.0.0",
   "description": "Above WhatsApp University — drop a claim, get the truth with sources. Stay sharp.",
   "permissions": ["contextMenus", "activeTab", "scripting", "storage"],
